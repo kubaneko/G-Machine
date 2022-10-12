@@ -1,3 +1,4 @@
-# Replace this with your name
+# Lazy evaluation library
 
-Describe your project(s) here.
+The project aims to make a library for lazy evaluation, higher order functions
+and for numerical type and a boolean condition whether an expression is zero.
