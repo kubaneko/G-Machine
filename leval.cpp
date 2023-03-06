@@ -6,14 +6,16 @@
 #include <stack>
 
 
-enum class GmVal {
+enum class GmValEnum {
     GLOB, 
     VALUE, 
     ARG, 
     LOCAL
 };
 
-enum class GmInstr { // Instructions for the Stack machine
+using GmVal=std::pair<GmValEnum,std::variant<int,std::string>>;
+
+enum class GmInstrEnum { // Instructions for the Stack machine
     PUSH, 
     SLIDE, 
     COND,
@@ -26,21 +28,13 @@ enum class GmInstr { // Instructions for the Stack machine
     UNWIND
 };
 
-template <GmInstr k, GmVal o>
-struct GmInstruction;
-
-template <GmVal k>
-struct GmValue;
-
-template <>
-struct GmValue<GmVal::GLOB>{
-    std::string ll;
+struct GmInstr{
+    std::pair<GmInstrEnum,std::variant<std::monostate,int, GmVal, 
+                std::pair<std::vector<GmInstr>,std::vector<GmInstr>>>> intr;
 };
 
-template <GmVal k>
-struct GmInstruction<GmInstr::PUSH, k>{
-     GmValue<k>* value;
-};
+using GmInstrT=std::pair<GmInstrEnum,std::variant<std::monostate,int, GmVal, 
+        std::pair<std::vector<GmInstr>,std::vector<GmInstr>>>>;
 
 struct Arg{
     int arg;
@@ -78,24 +72,13 @@ LEfunction (int sizeArg){
 int getArg(int numArg){
     return args[numArg-1];
 };
-
-//bool emitInstr(&std::stack<Instr> st){
-//    args.
-//    visit
-//
-//    push i
-//    body.emit
-//}
-
 };
 
 static std::map<std::string, LEfunction> function_library;
 
 class G_machine{
+    std::map<std::string, LEfunction> used_function_library;
     std::stack<std::stack<GmVal>> dump;
     std::stack<GmVal> curr_stack;
     std::vector<GmInstr> instructs;
-    int execute(LEfunction func) {
-        return 1;
-    };
 };
