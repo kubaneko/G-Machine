@@ -4,7 +4,8 @@
 #include <memory>
 #include <map>
 #include <stack>
-
+#include <memory>
+#include <vector>
 
 enum class GmValEnum {
     GLOB, 
@@ -29,12 +30,13 @@ enum class GmInstrEnum { // Instructions for the Stack machine
 };
 
 struct GmInstr{
-    std::pair<GmInstrEnum,std::variant<std::monostate,int, GmVal, 
-                std::pair<std::vector<GmInstr>,std::vector<GmInstr>>>> intr;
+    GmInstrEnum instr;
+    std::variant<std::monostate,int, GmVal, 
+                std::pair<std::vector<GmInstr>,std::vector<GmInstr>>> data;
 };
 
-using GmInstrT=std::pair<GmInstrEnum,std::variant<std::monostate,int, GmVal, 
-        std::pair<std::vector<GmInstr>,std::vector<GmInstr>>>>;
+using GmInstrData=<std::monostate,int, GmVal, 
+                std::pair<std::vector<GmInstr>,std::vector<GmInstr>>>;
 
 struct Arg{
     int arg;
@@ -49,36 +51,126 @@ std::vector<int> args;
 
 std::shared_ptr<LEfunction> body;
 
-// bool setBody(LEfunction bd){ 
-//     for (int i=0;i<bd->arity();i++){
-//         auto&& arg bd.getArg(i);
-// 
-//     }
-// 
-//     if bd LEfunction
-//         check params
-//     body=mkptr(bd);
-// };
-
 LEfunction (int sizeArg){
     args=std::vector<int>(sizeArg);
 
 };
-
-// int arity(){
-//     return args.length();
-// };
 
 int getArg(int numArg){
     return args[numArg-1];
 };
 };
 
+using GmNode=std::variant<int,SCo,App>>;
+
+// vector stack with exposed underlying vector
+// because we need indexing, insert of vectors and other operations
+class i_stack : public std::stack<std::shared_pointer<GmNode>,
+                        std::vector<std::shared_pointer<GmNode>>>{
+    using std::stack<std::shared_pointer<GmNode>>::c;
+}
+
+
 static std::map<std::string, LEfunction> function_library;
 
 class G_machine{
-    std::map<std::string, LEfunction> used_function_library;
-    std::stack<std::stack<GmVal>> dump;
-    std::stack<GmVal> curr_stack;
-    std::vector<GmInstr> instructs;
+    std::map<std::string, SCo> used_function_library;
+    // stack but we need indexing
+    using curr_stack_t = std::vector<>;
+    curr_stack_t curr_stack;
+    std::stack<std::pair<std::stack<GmInstr>,curr_stack_t>> dump;
+    std::stack<GmInstr> instructs;
+    int eval(){
+        while (!instucts.empty()){
+            GmInstr* next=instructs.top();
+            instructs.pop();
+            switch (next->intr) {
+                case PUSH
+                    GmVal* save=curr_stack.top();
+                    switch (save->first) {
+                        case GmValEnum.GLOB
+                            std::string name=std::get<GLOB>(save->second);
+                            
+                        break;
+                        case GmValEnum.VALUE, 
+                        break;
+                        case GmValEnum.ARG, 
+                        break;
+                        case GmValEnum.LOCAL
+                        break;
+                    }
+                break;
+                case SLIDE
+                    GmVal* save=curr_stack.top();
+                    int num=std::get<SLIDE>(next->data);
+                    for (int i=0;i<=num;++i){
+                        curr_stack.pop();
+                    }
+                    curr_stack.push(save);
+                break;
+                case COND
+                    GmVal* cond=curr_stack.top();
+                    auto code_pair=std::get<COND>(next->data);
+                    curr_stack.pop();
+                    assert(cond==GmValEnum.Num);
+                    if (cond.second!=0){
+                        for(int i=code_pair.first.length()-1; i>-1;--i){
+                            curr_stack.push(code_pair.first[i]);
+                        }
+                    } else {
+                        for(int i=code_pair.second.length()-1; i>-1;--i){
+                            curr_stack.push(code_pair.second[i]);
+                        }
+                    }
+                    // Add the new code to instructs
+                break;
+                case MKAP 
+                break;
+                case UNWIND
+                break;
+                case EVAL 
+                    GmVal* nd=curr_stack.top();
+                    curr_stack.pop();
+                    dump.push(pair(instucts,curr_stack));
+                    instructs=std::pair(GmInstrEnum.UNWIND,std::monostate);
+                    curr_stack=std::stack(nd);
+                break;
+                case ADD 
+                    auto arg=getNums();
+                    curr_stack.push(arg.second+arg.first);
+                break;
+                case SUB 
+                    auto arg=getNums();
+                    curr_stack.push(arg.second-arg.first);
+                break;
+                case DIV 
+                    auto arg=getNums();
+                    curr_stack.push(arg.second/arg.first);
+                break;
+                case MUL 
+                    auto arg=getNums();
+                    curr_stack.push(arg.second*arg.first);
+                break;
+            }
+        }
+        return 1       
+    }
+    std::pair<int,int> getNums (){
+        GmVal* a = curr_stack.top();
+        curr_stack.pop();
+        GmVal* b = curr_stack.top();
+        curr_stack.pop();
+        assert(a.first==GmValEnum.Num && b.first==GmValEnum.Num);
+        return pair(std::get<1>(a.second),std::get<1>(b.second));
+    }
 };
+
+struct SCo{
+    int arity;
+    std::vector<GmInstr> code;
+}
+
+struct App{
+    void* function
+    void* arg
+}
