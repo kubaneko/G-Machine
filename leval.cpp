@@ -4,6 +4,7 @@
 #include <memory>
 #include <map>
 #include <stack>
+#include <stdexcept>
 #include <cassert>
 
 enum GmValEnum {
@@ -65,10 +66,7 @@ int getArg(int numArg){
 };
 };
 
-struct SCo{
-    int arity;
-    std::vector<GmInstr> code;
-};
+struct SCo;
 
 struct App;
 
@@ -112,6 +110,10 @@ class i_stack : public std::stack<T,std::vector<T>>{
 };
 using stack_i=i_stack<std::shared_ptr<GmNode>>;
 
+struct SCo{
+    int arity;
+    i_stack<GmInstr> code;
+};
 
 std::map<std::string, std::shared_ptr<SCo>> function_library;
 
@@ -121,7 +123,7 @@ class G_machine{
     stack_i curr_stack;
     std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump;
     i_stack<GmInstr> code;
-    void perform_instr(GmInstr& next){
+    void perform_instr(GmInstr&& next){
         switch (next.instr) {
             case PUSH: {
                 push(std::get<PUSH>(next.data));
@@ -184,13 +186,48 @@ class G_machine{
         }
     }
     int eval(){
-        while (!code.empty()){
-            perform_instr(code.top());
+        while (!end()){
+            auto&& next_i=std::move(code.top());
             code.pop();
+            perform_instr(std::move(next_i));
         }
-        return 1;       
+        if (curr_stack.size()==1 && curr_stack.top()->index()==NUME){
+            return std::get<NUME>(*curr_stack.top());
+        }
+        throw std::logic_error( "Program terminated without result" );
     }
     void unwind(){
+        switch (curr_stack.top()->index()){
+            case NUME: {
+                if (dump.empty()){
+                    code=i_stack<GmInstr>();
+                } else {
+                    auto&& next=std::move(dump.top());
+                    auto&& node=std::move(curr_stack.top());
+                    curr_stack.pop();
+                    curr_stack=std::move(next.second);
+                    curr_stack.push(std::move(node));
+                    code=std::move(next.first);
+                    dump.pop();
+                }
+            } break; 
+            case SCOE: {
+                auto&& sco=std::get<SCOE>(*curr_stack.top());
+                code=sco->code;
+                if (!(curr_stack.size()+1>=sco->arity)) {
+                    throw std::logic_error( "supercombinator does not have enough arguments" );
+                }
+            } break; 
+            case APPE: {
+                auto&& node=std::move(curr_stack.top());
+                curr_stack.pop();
+                auto&& app=std::move(std::get<APPE>(*node));
+                curr_stack.pop();
+                code=i_stack<GmInstr>();
+                code.push(GmInstr(UNWIND,std::monostate()));
+                curr_stack.push(std::move(app.function));
+            } break;
+        }
     }
     void push(GmVal val){
         switch (val.first) {
@@ -199,10 +236,13 @@ class G_machine{
                 curr_stack.push(std::make_shared<GmNode>(sco));
             } break;
             case VALUE: {
+                curr_stack.push(std::make_shared<GmNode>(std::get<VALUE>(val.second)));
             } break; 
             case ARG: {
+                curr_stack.push(curr_stack[std::get<ARG>(val.second) + 1]);
             } break; 
             case LOCAL: {
+                curr_stack.push(curr_stack[std::get<LOCAL>(val.second)]);
             } break; 
         }
     }
@@ -213,6 +253,10 @@ class G_machine{
         curr_stack.pop();
         assert(a->index()==NUME && b->index()==NUME);
         return std::pair(std::get<NUME>(*a),std::get<NUME>(*b));
+    }
+    bool end(){
+        bool whnf = curr_stack.size()==1 && curr_stack.top()->index()==NUME;
+            return code.empty() || (dump.empty() && whnf);
     }
 };
 
