@@ -114,7 +114,7 @@ using stack_i=i_stack<std::shared_ptr<GmNode>>;
 struct SCo{
     int arity{};
     i_stack<GmInstr> code;
-} __attribute__((aligned(32)));
+};
 
 std::map<std::string, std::shared_ptr<SCo>> function_library;
 
@@ -134,8 +134,6 @@ class G_machine{
         { }
 
     void perform_instr(GmInstr&& next){
-        printf(" %d ", next.instr);
-        fflush(stdout);
         switch (next.instr) {
             case PUSH: {
                 push(std::get<PUSH>(next.data));
@@ -213,24 +211,20 @@ class G_machine{
         throw std::logic_error( "Program terminated without result" );
     }
     void unwind(){
-        printf("node: %d", curr_stack.top()->index());
-        fflush(stdout);
         switch (curr_stack.top()->index()){
             case NUME: {
                 if (dump.empty()){
                     code=i_stack<GmInstr>();
                 } else {
-                    auto next=std::move(dump.top());
-                    auto node=std::move(curr_stack.top());
-                    curr_stack.pop();
+                    auto st=std::move(curr_stack);
                     curr_stack=std::move(dump.top().second);
-                    curr_stack.push(std::move(node));
+                    curr_stack.insert(std::move(st));
                     code=std::move(dump.top().first);
                     dump.pop();
                 }
             } break; 
             case SCOE: {
-                auto sco=std::get<SCOE>(*curr_stack.top());
+                SCo* sco=std::get<SCOE>(*curr_stack.top());
                 code=sco->code;
                 if (!(curr_stack.size()+1>=sco->arity)) {
                     throw std::logic_error( "supercombinator does not have enough arguments" );
@@ -280,21 +274,31 @@ class G_machine{
     // std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump;
     // i_stack<GmInstr> code;
 auto main () -> int {
-     SCo main={0, {}};
+     SCo omega={0, {}};
+     SCo mul={1, {}};
     ;
-     std::vector<GmInstr> vec ={{UNWIND, std::monostate()},{SLIDE, 1},{MKAP,
-         std::monostate()},{PUSH, std::pair(VALUE,
-                 GmValVal{std::in_place_index<VALUE>, 10})},{PUSH,
+     std::vector<GmInstr> vec ={{UNWIND, std::monostate()},{PUSH,
              std::pair(GLOB, std::string("main"))}};
-     main.code.insert(vec);
+     std::vector<GmInstr> ex2 ={{UNWIND,std::monostate()}, {SLIDE, 1}, {MUL, std::monostate()}, {EVAL, std::monostate()}, 
+{PUSH, std::pair(VALUE,
+                 GmValVal{std::in_place_index<VALUE>, 10})}, 
+                 {EVAL, std::monostate()}, 
+{PUSH, std::pair(VALUE,
+                 GmValVal{std::in_place_index<VALUE>, 10})}
+                 };
+
+     // Push (Arg 0), Eval, Push (Arg 2), Eval, Mul, Slide 3, Unwind 
+     omega.code.insert(vec);
+     mul.code.insert(ex2);
     std::map<std::string, SCo> lib ={};
-    lib["main"]=main;
+    lib["main"]=omega;
     // G_machine mach{lib, {}, {}, {{UNWIND, std::monostate()}, {PUSH,
              // std::pair(GLOB, std::string("main"))}}};
-    i_stack<GmInstr> i{};
-    i.insert({{UNWIND, std::monostate()}, {PUSH,
+    i_stack<GmInstr> i;
+    i.insert({{UNWIND, std::monostate()},
+            {PUSH,
              GmVal{std::pair(GLOB, std::string("main"))}}});
     G_machine mach(lib,stack_i{},std::stack<std::pair<i_stack<GmInstr>,stack_i>>{},i);
-    printf("%d", mach.eval());
+    printf("res: %d", mach.eval());
 }
 
