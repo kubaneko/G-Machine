@@ -47,17 +47,41 @@ struct Arg{
 
 using Argument = std::variant<Arg, int>;
 
+struct function_prototype{
+    std::string name;
+    std::vector<std::variant<Arg, int, function_prototype>> args;
+};
+
 class LEfunction;
 
 class LEfunction {
-std::vector<int> args;
+    std::string name;
+    std::vector<int> args;
+    std::vector<bool> bindings;
+    std::vector<GmInstr> code{};
 
-std::shared_ptr<LEfunction> body;
 
-explicit LEfunction (int sizeArg){
-    args=std::vector<int>(sizeArg);
-
+LEfunction (int arity, std::string name) : name(name){
+    args=std::vector<int>(arity);
+    bindings=std::vector<bool>(arity);
 };
+
+void bind(int index, int value){
+    args[index]=value;
+    bindings[index]=true;
+}
+
+bool compile(function_prototype f){
+    return false;
+}
+
+int exec(){
+    return 1;
+}
+
+function_prototype operator() (std::vector<std::variant<Arg, int, function_prototype>> body){
+    return {name, body};
+}
 
 auto getArg(int numArg) -> int{
     return args[numArg-1];
@@ -247,7 +271,7 @@ class G_machine{
                 curr_stack.push(std::make_shared<GmNode>(std::get<VALUE>(val.second)));
             } break; 
             case ARG: {
-                curr_stack.push(curr_stack[std::get<ARG>(val.second) + 1]);
+                curr_stack.push(std::get<APPE>(*curr_stack[std::get<ARG>(val.second) + 1]).arg);
             } break; 
             case LOCAL: {
                 curr_stack.push(curr_stack[std::get<LOCAL>(val.second)]);
@@ -278,7 +302,7 @@ auto main () -> int {
      SCo mul={1, {}};
     ;
      std::vector<GmInstr> vec ={{UNWIND, std::monostate()},{PUSH,
-             std::pair(GLOB, std::string("main"))}};
+             std::pair(GLOB, std::string("omega"))}};
      std::vector<GmInstr> ex2 ={{UNWIND,std::monostate()}, {SLIDE, 1}, {MUL, std::monostate()}, {EVAL, std::monostate()}, 
 {PUSH, std::pair(VALUE,
                  GmValVal{std::in_place_index<VALUE>, 10})}, 
