@@ -52,6 +52,7 @@ struct function_prototype{
     std::vector<std::variant<Arg, int, function_prototype>> args;
 };
 
+struct SCo;
 class LEfunction;
 
 class LEfunction {
@@ -59,9 +60,9 @@ class LEfunction {
     std::vector<int> args;
     std::vector<bool> bindings;
     std::vector<GmInstr> code{};
+    std::map<std::string, SCo>* globals;
 
-
-LEfunction (int arity, std::string name) : name(name){
+LEfunction (int arity, std::string name, auto library) : name(name), globals(library){
     args=std::vector<int>(arity);
     bindings=std::vector<bool>(arity);
 };
@@ -88,7 +89,6 @@ auto getArg(int numArg) -> int{
 };
 };
 
-struct SCo;
 
 struct App;
 
@@ -143,7 +143,7 @@ struct SCo{
 std::map<std::string, std::shared_ptr<SCo>> function_library;
 
 class G_machine{
-    std::map<std::string, SCo> used_function_library;
+    std::map<std::string, SCo>* used_function_library;
     // stack but we need indexing
     stack_i curr_stack{};
     std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump{};
@@ -264,7 +264,7 @@ class G_machine{
     void push(GmVal  val){
         switch (val.first) {
             case GLOB: {
-                SCo* sco = &used_function_library[std::get<GLOB>(val.second)];
+                SCo* sco = &(*used_function_library)[std::get<GLOB>(val.second)];
                 curr_stack.push(std::make_shared<GmNode>(sco));
             } break;
             case VALUE: {
@@ -322,7 +322,7 @@ auto main () -> int {
     i.insert({{UNWIND, std::monostate()},
             {PUSH,
              GmVal{std::pair(GLOB, std::string("main"))}}});
-    G_machine mach(lib,stack_i{},std::stack<std::pair<i_stack<GmInstr>,stack_i>>{},i);
+    G_machine mach(&lib,stack_i{},std::stack<std::pair<i_stack<GmInstr>,stack_i>>{},i);
     printf("res: %d", mach.eval());
 }
 
