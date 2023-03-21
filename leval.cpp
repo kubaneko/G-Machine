@@ -14,7 +14,8 @@ enum GmValEnum {
     LOCAL
 };
 
-using GmVal=std::pair<GmValEnum,std::variant<std::string,int,int,int>>;
+using GmValVal=std::variant<std::string,int,int,int>;
+using GmVal=std::pair<GmValEnum,GmValVal>;
 
 enum GmInstrEnum { // Instructions for the Stack machine
     SLIDE, 
@@ -26,6 +27,7 @@ enum GmInstrEnum { // Instructions for the Stack machine
     SUB, 
     DIV, 
     MUL, 
+    EQU, 
     UNWIND
 };
 
@@ -33,11 +35,7 @@ struct GmInstr{
     using GmInstrData=std::variant<int, GmVal, 
                 std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
     GmInstrEnum instr;
-    GmInstrData data;
-    GmInstr(GmInstrEnum instr, GmInstrData&& data){
-        instr=instr;
-        data=std::move(data);
-    }
+    GmInstrData data{};
 };
 
 using GmInstrData=std::variant<int, GmVal, 
@@ -56,12 +54,12 @@ std::vector<int> args;
 
 std::shared_ptr<LEfunction> body;
 
-LEfunction (int sizeArg){
+explicit LEfunction (int sizeArg){
     args=std::vector<int>(sizeArg);
 
 };
 
-int getArg(int numArg){
+auto getArg(int numArg) -> int{
     return args[numArg-1];
 };
 };
@@ -73,8 +71,8 @@ struct App;
 using GmNode=std::variant<int,SCo*,App>;
 
 struct App{
-    std::shared_ptr<GmNode> function;
-    std::shared_ptr<GmNode> arg;
+    std::shared_ptr<GmNode> function{};
+    std::shared_ptr<GmNode> arg{};
 
     App(std::shared_ptr<GmNode>&& func, std::shared_ptr<GmNode>&& arg){
         function=std::move(func);
@@ -96,11 +94,14 @@ class i_stack : public std::stack<T,std::vector<T>>{
         using std::stack<T,std::vector<T>>::c;
     public:
     // reverse indexing
-    T& operator[]( size_t pos ){
+    auto operator[]( size_t pos ) -> T&{
         assert(c.size()>0);
         return c[c.size()-1-pos];
     }
 
+    void insert(std::vector<T>&& to_insert){
+        c.insert(c.end(),to_insert.begin(),to_insert.end());
+    }
     void insert(std::vector<T>& to_insert){
         c.insert(c.end(),to_insert.begin(),to_insert.end());
     }
@@ -111,19 +112,30 @@ class i_stack : public std::stack<T,std::vector<T>>{
 using stack_i=i_stack<std::shared_ptr<GmNode>>;
 
 struct SCo{
-    int arity;
+    int arity{};
     i_stack<GmInstr> code;
-};
+} __attribute__((aligned(32)));
 
 std::map<std::string, std::shared_ptr<SCo>> function_library;
 
 class G_machine{
-    std::map<std::string, std::shared_ptr<SCo>> used_function_library;
+    std::map<std::string, SCo> used_function_library;
     // stack but we need indexing
-    stack_i curr_stack;
-    std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump;
+    stack_i curr_stack{};
+    std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump{};
     i_stack<GmInstr> code;
+
+    public:
+        G_machine(auto&& lib, auto&& curr, auto&& dump, auto&& code) : 
+            used_function_library(std::forward<decltype(lib)>(lib)),
+            curr_stack(std::forward<decltype(curr)>(curr)),
+            dump(std::forward<decltype(dump)>(dump)),
+            code(std::forward<decltype(code)>(code))
+        { }
+
     void perform_instr(GmInstr&& next){
+        printf(" %d ", next.instr);
+        fflush(stdout);
         switch (next.instr) {
             case PUSH: {
                 push(std::get<PUSH>(next.data));
@@ -163,7 +175,7 @@ class G_machine{
                 curr_stack.pop();
                 dump.push(std::pair(code,curr_stack));
                 code=i_stack<GmInstr>();
-                code.push(GmInstr(UNWIND,std::monostate()));
+                code.push({UNWIND,std::monostate()});
                 curr_stack=stack_i();
                 curr_stack.push(std::move(nd));
             } break;
@@ -183,11 +195,15 @@ class G_machine{
                 auto arg=getNums();
                 curr_stack.push(std::move(std::make_shared<GmNode>(arg.second*arg.first)));
             } break;
+            case EQU: {
+                auto arg=getNums();
+                curr_stack.push(std::move(std::make_shared<GmNode>(arg.second==arg.first)));
+            } break;
         }
     }
-    int eval(){
+    auto eval() -> int{
         while (!end()){
-            auto&& next_i=std::move(code.top());
+            auto next_i=std::move(code.top());
             code.pop();
             perform_instr(std::move(next_i));
         }
@@ -197,42 +213,40 @@ class G_machine{
         throw std::logic_error( "Program terminated without result" );
     }
     void unwind(){
+        printf("node: %d", curr_stack.top()->index());
+        fflush(stdout);
         switch (curr_stack.top()->index()){
             case NUME: {
                 if (dump.empty()){
                     code=i_stack<GmInstr>();
                 } else {
-                    auto&& next=std::move(dump.top());
-                    auto&& node=std::move(curr_stack.top());
+                    auto next=std::move(dump.top());
+                    auto node=std::move(curr_stack.top());
                     curr_stack.pop();
-                    curr_stack=std::move(next.second);
+                    curr_stack=std::move(dump.top().second);
                     curr_stack.push(std::move(node));
-                    code=std::move(next.first);
+                    code=std::move(dump.top().first);
                     dump.pop();
                 }
             } break; 
             case SCOE: {
-                auto&& sco=std::get<SCOE>(*curr_stack.top());
+                auto sco=std::get<SCOE>(*curr_stack.top());
                 code=sco->code;
                 if (!(curr_stack.size()+1>=sco->arity)) {
                     throw std::logic_error( "supercombinator does not have enough arguments" );
                 }
             } break; 
             case APPE: {
-                auto&& node=std::move(curr_stack.top());
-                curr_stack.pop();
-                auto&& app=std::move(std::get<APPE>(*node));
-                curr_stack.pop();
                 code=i_stack<GmInstr>();
-                code.push(GmInstr(UNWIND,std::monostate()));
-                curr_stack.push(std::move(app.function));
+                code.push({UNWIND,std::monostate()});
+                curr_stack.push(std::get<APPE>(*curr_stack.top()).function);
             } break;
         }
     }
-    void push(GmVal val){
+    void push(GmVal  val){
         switch (val.first) {
             case GLOB: {
-                SCo* sco=used_function_library[std::get<GLOB>(val.second)].get();
+                SCo* sco = &used_function_library[std::get<GLOB>(val.second)];
                 curr_stack.push(std::make_shared<GmNode>(sco));
             } break;
             case VALUE: {
@@ -246,17 +260,41 @@ class G_machine{
             } break; 
         }
     }
-    std::pair<int,int> getNums (){
-        auto&& a = std::move(curr_stack.top());
+    auto getNums () -> std::pair<int,int>{
+        auto a = std::move(curr_stack.top());
         curr_stack.pop();
-        auto&& b = std::move(curr_stack.top());
+        auto b = std::move(curr_stack.top());
         curr_stack.pop();
         assert(a->index()==NUME && b->index()==NUME);
         return std::pair(std::get<NUME>(*a),std::get<NUME>(*b));
     }
-    bool end(){
+    auto end() -> bool{
         bool whnf = curr_stack.size()==1 && curr_stack.top()->index()==NUME;
             return code.empty() || (dump.empty() && whnf);
     }
 };
+
+    // std::map<std::string, SCo> used_function_library;
+    // // stack but we need indexing
+    // stack_i curr_stack;
+    // std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump;
+    // i_stack<GmInstr> code;
+auto main () -> int {
+     SCo main={0, {}};
+    ;
+     std::vector<GmInstr> vec ={{UNWIND, std::monostate()},{SLIDE, 1},{MKAP,
+         std::monostate()},{PUSH, std::pair(VALUE,
+                 GmValVal{std::in_place_index<VALUE>, 10})},{PUSH,
+             std::pair(GLOB, std::string("main"))}};
+     main.code.insert(vec);
+    std::map<std::string, SCo> lib ={};
+    lib["main"]=main;
+    // G_machine mach{lib, {}, {}, {{UNWIND, std::monostate()}, {PUSH,
+             // std::pair(GLOB, std::string("main"))}}};
+    i_stack<GmInstr> i{};
+    i.insert({{UNWIND, std::monostate()}, {PUSH,
+             GmVal{std::pair(GLOB, std::string("main"))}}});
+    G_machine mach(lib,stack_i{},std::stack<std::pair<i_stack<GmInstr>,stack_i>>{},i);
+    printf("%d", mach.eval());
+}
 
