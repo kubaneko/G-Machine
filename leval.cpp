@@ -7,109 +7,6 @@
 #include <stdexcept>
 #include <cassert>
 
-enum GmValEnum {
-    GLOB, 
-    VALUE, 
-    ARG, 
-    LOCAL
-};
-
-using GmValVal=std::variant<std::string,int,int,int>;
-using GmVal=std::pair<GmValEnum,GmValVal>;
-
-enum GmInstrEnum { // Instructions for the Stack machine
-    SLIDE, 
-    PUSH, 
-    COND,
-    MKAP, 
-    EVAL, 
-    ADD, 
-    SUB, 
-    DIV, 
-    MUL, 
-    EQU, 
-    UNWIND
-};
-
-struct GmInstr{
-    using GmInstrData=std::variant<int, GmVal, 
-                std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
-    GmInstrEnum instr;
-    GmInstrData data{};
-};
-
-using GmInstrData=std::variant<int, GmVal, 
-            std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
-
-struct Arg{
-    int arg;
-};
-
-using Argument = std::variant<Arg, int>;
-
-struct function_prototype{
-    std::string name;
-    std::vector<std::variant<Arg, int, function_prototype>> args;
-};
-
-struct SCo;
-class LEfunction;
-
-class LEfunction {
-    std::string name;
-    std::vector<int> args;
-    std::vector<bool> bindings;
-    std::vector<GmInstr> code{};
-    std::map<std::string, SCo>* globals;
-
-LEfunction (int arity, std::string name, auto library) : name(name), globals(library){
-    args=std::vector<int>(arity);
-    bindings=std::vector<bool>(arity);
-};
-
-void bind(int index, int value){
-    args[index]=value;
-    bindings[index]=true;
-}
-
-bool compile(function_prototype f){
-    return false;
-}
-
-int exec(){
-    return 1;
-}
-
-function_prototype operator() (std::vector<std::variant<Arg, int, function_prototype>> body){
-    return {name, body};
-}
-
-auto getArg(int numArg) -> int{
-    return args[numArg-1];
-};
-};
-
-
-struct App;
-
-using GmNode=std::variant<int,SCo*,App>;
-
-struct App{
-    std::shared_ptr<GmNode> function{};
-    std::shared_ptr<GmNode> arg{};
-
-    App(std::shared_ptr<GmNode>&& func, std::shared_ptr<GmNode>&& arg){
-        function=std::move(func);
-        arg=std::move(arg);
-    }
-};
-
-enum GmNodeEnum{
-    NUME,
-    SCOE,
-    APPE,
-};
-
 // vector stack with exposed underlying vector
 // because we need indexing, insert of vectors and other operations
 template<typename T>
@@ -133,20 +30,138 @@ class i_stack : public std::stack<T,std::vector<T>>{
         c.insert(c.end(),to_insert.c.begin(),to_insert.c.end());
     }
 };
-using stack_i=i_stack<std::shared_ptr<GmNode>>;
 
-struct SCo{
-    int arity{};
-    i_stack<GmInstr> code;
+enum GmValEnum {
+    GLOB, 
+    VALUE, 
+    ARG, 
+    LOCAL
 };
 
-std::map<std::string, std::shared_ptr<SCo>> function_library;
+using GmVal=std::pair<GmValEnum,int>;
+
+enum GmInstrEnum { // Instructions for the Stack machine
+    SLIDE, 
+    PUSH, 
+    COND,
+    MKAP, 
+    EVAL, 
+    ADD, 
+    SUB, 
+    DIV, 
+    MUL, 
+    EQU, 
+    UNWIND
+};
+
+struct GmInstr{
+    using GmInstrData=std::variant<int, GmVal, 
+                std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
+    GmInstrEnum instr;
+    GmInstrData data{};
+};
+
+struct SCo{
+    int arity=-1;
+    i_stack<GmInstr> code={};
+};
+
+using GmInstrData=std::variant<int, GmVal, 
+            std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
+
+struct Arg{
+    int arg;
+};
+
+using Arguments = std::vector<std::variant<Arg, int, function_prototype>>;
+
+struct function_prototype{
+    int hash=0;
+    Arguments args;
+};
+
+using fun_lib=std::map<int, SCo>;
+fun_lib function_library={};
+
+struct SCo;
+
+class LEfunction {
+    int hash=-1;
+    std::vector<int> args;
+    std::vector<GmInstr> code{};
+    std::map<int, SCo>* globals=&function_library;
+
+    public:
+LEfunction (int arity, auto library){
+    globals=library;
+    args=std::vector<int>(arity);
+    (*globals)[globals->size()]={};
+    hash=globals->size();
+};
+
+LEfunction (int arity){
+    args=std::vector<int>(arity);
+    (*globals)[globals->size()]={};
+    hash=globals->size();
+};
+
+// allows for non-recursive lamdas
+// {2}.compile(plus(Arg(1), Arg(2)))
+function_prototype compile(function_prototype body){
+
+    return body;
+}
+
+void compile(function_prototype body){
+    return false;
+}
+
+int exec(std::vector<int> new_args){
+    int j=0;
+    for (int i=0;i<args.size();++i){
+        if (!bindings[i]){
+            args[i]=new_args[j];
+            ++j;
+        }
+    }
+    // prepare_g_machine();
+    return -1;
+}
+
+function_prototype operator() (Arguments arguments){
+    return {hash,arguments};
+}
+};
+
+
+struct App;
+
+using GmNode=std::variant<int,SCo*,App>;
+using stack_i=i_stack<std::shared_ptr<GmNode>>;
+using dump_t=std::stack<std::pair<i_stack<GmInstr>,stack_i>>;
+
+
+struct App{
+    std::shared_ptr<GmNode> function{};
+    std::shared_ptr<GmNode> arg{};
+
+    App(std::shared_ptr<GmNode>&& func, std::shared_ptr<GmNode>&& arg){
+        function=std::move(func);
+        arg=std::move(arg);
+    }
+};
+
+enum GmNodeEnum{
+    NUME,
+    SCOE,
+    APPE,
+};
 
 class G_machine{
-    std::map<std::string, SCo>* used_function_library;
+    fun_lib* used_function_library;
     // stack but we need indexing
     stack_i curr_stack{};
-    std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump{};
+    dump_t dump{};
     i_stack<GmInstr> code;
 
     public:
@@ -264,17 +279,17 @@ class G_machine{
     void push(GmVal  val){
         switch (val.first) {
             case GLOB: {
-                SCo* sco = &(*used_function_library)[std::get<GLOB>(val.second)];
+                SCo* sco = &(*used_function_library)[val.second];
                 curr_stack.push(std::make_shared<GmNode>(sco));
             } break;
             case VALUE: {
-                curr_stack.push(std::make_shared<GmNode>(std::get<VALUE>(val.second)));
+                curr_stack.push(std::make_shared<GmNode>(val.second));
             } break; 
             case ARG: {
-                curr_stack.push(std::get<APPE>(*curr_stack[std::get<ARG>(val.second) + 1]).arg);
+                curr_stack.push(std::get<APPE>(*curr_stack[val.second + 1]).arg);
             } break; 
             case LOCAL: {
-                curr_stack.push(curr_stack[std::get<LOCAL>(val.second)]);
+                curr_stack.push(curr_stack[val.second]);
             } break; 
         }
     }
@@ -292,37 +307,33 @@ class G_machine{
     }
 };
 
-    // std::map<std::string, SCo> used_function_library;
-    // // stack but we need indexing
-    // stack_i curr_stack;
-    // std::stack<std::pair<i_stack<GmInstr>,stack_i>> dump;
-    // i_stack<GmInstr> code;
 auto main () -> int {
      SCo omega={0, {}};
      SCo mul={1, {}};
     ;
      std::vector<GmInstr> vec ={{UNWIND, std::monostate()},{PUSH,
-             std::pair(GLOB, std::string("omega"))}};
+             std::pair(GLOB, 1)}};
      std::vector<GmInstr> ex2 ={{UNWIND,std::monostate()}, {SLIDE, 1}, {MUL, std::monostate()}, {EVAL, std::monostate()}, 
 {PUSH, std::pair(VALUE,
-                 GmValVal{std::in_place_index<VALUE>, 10})}, 
+                 10)}, 
                  {EVAL, std::monostate()}, 
 {PUSH, std::pair(VALUE,
-                 GmValVal{std::in_place_index<VALUE>, 10})}
+                 10)}
                  };
 
      // Push (Arg 0), Eval, Push (Arg 2), Eval, Mul, Slide 3, Unwind 
      omega.code.insert(vec);
      mul.code.insert(ex2);
-    std::map<std::string, SCo> lib ={};
-    lib["main"]=omega;
-    // G_machine mach{lib, {}, {}, {{UNWIND, std::monostate()}, {PUSH,
-             // std::pair(GLOB, std::string("main"))}}};
+    fun_lib lib ={};
+    lib[1]=omega;
+    LEfunction a={3, &function_library};
+    LEfunction b={3, &function_library};
+    a({b({1,2,3}),2,3});
     i_stack<GmInstr> i;
     i.insert({{UNWIND, std::monostate()},
             {PUSH,
-             GmVal{std::pair(GLOB, std::string("main"))}}});
-    G_machine mach(&lib,stack_i{},std::stack<std::pair<i_stack<GmInstr>,stack_i>>{},i);
+             GmVal{std::pair(GLOB, 1)}}});
+    G_machine mach(&lib,stack_i{},dump_t{},i);
     printf("res: %d", mach.eval());
 }
 
