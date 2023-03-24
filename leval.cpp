@@ -54,6 +54,15 @@ enum GmInstrEnum { // Instructions for the Stack machine
     UNWIND
 };
 
+enum BINOP_MAPPINGS{
+    ADD_M,
+    SUB_M,
+    DIV_M,
+    MUL_M,
+    EQU_M,
+    IF_M
+};
+
 struct GmInstr{
     using GmInstrData=std::variant<int, GmVal, 
                 std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
@@ -64,6 +73,10 @@ struct GmInstr{
 struct SCo{
     int arity=-1;
     i_stack<GmInstr> code={};
+    SCo (){}
+    SCo (int arity, std::vector<GmInstr> code_s) : arity(arity){
+        code.insert(code_s);
+    }
 };
 
 using GmInstrData=std::variant<int, GmVal, 
@@ -77,12 +90,54 @@ struct Arg{
 struct function_prototype{
     int hash=0;
     std::vector<std::variant<Arg, int, function_prototype>> args;
+    function_prototype operator+ (auto&& a){
+        return {ADD_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator- (auto&& a){
+        return {SUB_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator* (auto&& a){
+        return {MUL_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator/ (auto&& a){
+        return {DIV_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator== (auto&& a){
+        return {EQU_M,{*this,std::forward<decltype(a)>(a)}};
+    }
 };
 
 using Arguments = std::vector<std::variant<Arg, int, function_prototype>>;
 
 using fun_lib=std::map<int, SCo>;
-fun_lib function_library={};
+
+fun_lib initialize_fun_lib(){
+    fun_lib lib={};
+    std::vector<GmInstr> binop ={{UNWIND,std::monostate()}, {SLIDE, 3}, {ADD,
+         std::monostate()}, {EVAL, std::monostate()}, {PUSH, std::pair(ARG, 1)}, {EVAL,
+             std::monostate()}, {PUSH, std::pair(ARG, 0)} };
+    GmInstr cond={COND,std::pair(std::vector<GmInstr>{{PUSH,std::pair(ARG,1)}},
+                std::vector<GmInstr>{{PUSH,std::pair(ARG,2)}})};
+    std::vector<GmInstr> if_code = {{UNWIND,std::monostate()}, {SLIDE,4}, cond, 
+        {EVAL,std::monostate()}, {PUSH, std::pair(ARG, 0)}};
+    lib[ADD_M]={2,binop};
+    binop[2].instr=SUB;
+    lib[SUB_M]={2,binop};
+    binop[2].instr=DIV;
+    lib[DIV_M]={2,binop};
+    binop[2].instr=MUL;
+    lib[MUL_M]={2,binop};
+    binop[2].instr=EQU;
+    lib[EQU_M]={2,binop};
+    lib[IF_M]={3,if_code};
+    return lib;
+};
+
+fun_lib function_library=initialize_fun_lib();
 
 struct SCo;
 
@@ -125,20 +180,6 @@ function_prototype operator() (Arguments arguments){
     return {hash,arguments};
 }
 
-function_prototype operator+ (function_prototype a){
-}
-
-function_prototype operator- (function_prototype a){
-}
-
-function_prototype operator* (function_prototype a){
-}
-
-function_prototype operator/ (function_prototype a){
-}
-
-function_prototype operator== (function_prototype a){
-}
 };
 
 
@@ -321,13 +362,9 @@ auto main () -> int {
     ;
      std::vector<GmInstr> vec ={{UNWIND, std::monostate()},{PUSH,
              std::pair(GLOB, 1)}};
-     std::vector<GmInstr> ex2 ={{UNWIND,std::monostate()}, {SLIDE, 1}, {MUL, std::monostate()}, {EVAL, std::monostate()}, 
-{PUSH, std::pair(VALUE,
-                 10)}, 
-                 {EVAL, std::monostate()}, 
-{PUSH, std::pair(VALUE,
-                 10)}
-                 };
+     std::vector<GmInstr> ex2 ={{UNWIND,std::monostate()}, {SLIDE, 3}, {MUL,
+         std::monostate()}, {EVAL, std::monostate()}, {PUSH, std::pair(ARG, 1)}, {EVAL,
+             std::monostate()}, {PUSH, std::pair(ARG, 0)} };
 
      // Push (Arg 0), Eval, Push (Arg 2), Eval, Mul, Slide 3, Unwind 
      omega.code.insert(vec);
