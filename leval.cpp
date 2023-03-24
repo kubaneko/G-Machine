@@ -73,12 +73,13 @@ struct Arg{
     int arg;
 };
 
-using Arguments = std::vector<std::variant<Arg, int, function_prototype>>;
 
 struct function_prototype{
     int hash=0;
-    Arguments args;
+    std::vector<std::variant<Arg, int, function_prototype>> args;
 };
+
+using Arguments = std::vector<std::variant<Arg, int, function_prototype>>;
 
 using fun_lib=std::map<int, SCo>;
 fun_lib function_library={};
@@ -107,22 +108,14 @@ LEfunction (int arity){
 
 // allows for non-recursive lamdas
 // {2}.compile(plus(Arg(1), Arg(2)))
-function_prototype compile(function_prototype body){
+LEfunction compile(function_prototype body){
 
-    return body;
-}
-
-void compile(function_prototype body){
-    return false;
+    return *this;
 }
 
 int exec(std::vector<int> new_args){
-    int j=0;
     for (int i=0;i<args.size();++i){
-        if (!bindings[i]){
-            args[i]=new_args[j];
-            ++j;
-        }
+        args[i]=new_args[i];
     }
     // prepare_g_machine();
     return -1;
@@ -130,6 +123,21 @@ int exec(std::vector<int> new_args){
 
 function_prototype operator() (Arguments arguments){
     return {hash,arguments};
+}
+
+function_prototype operator+ (function_prototype a){
+}
+
+function_prototype operator- (function_prototype a){
+}
+
+function_prototype operator* (function_prototype a){
+}
+
+function_prototype operator/ (function_prototype a){
+}
+
+function_prototype operator== (function_prototype a){
 }
 };
 
