@@ -15,9 +15,9 @@ class i_stack : public std::stack<T,std::vector<T>>{
         using std::stack<T,std::vector<T>>::c;
     public:
     // reverse indexing
-    auto operator[]( size_t pos ) -> T&{
+    auto operator[]( int pos ) -> T&{
         assert(c.size()>0);
-        return c[c.size()-1-pos];
+        return c[c.size()-1-size_t(pos)];
     }
 
     void insert(std::vector<T>&& to_insert){
@@ -307,7 +307,7 @@ class G_machine{
             case SCOE: {
                 SCo* sco=std::get<SCOE>(*curr_stack.top());
                 code=sco->code;
-                if (!(curr_stack.size()+1>=sco->arity)) {
+                if (!(curr_stack.size()+1>=size_t(sco->arity))) {
                     throw std::logic_error( "supercombinator does not have enough arguments" );
                 }
             } break; 
