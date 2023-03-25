@@ -147,7 +147,7 @@ using fun_lib=std::map<int, SCo>;
 fun_lib initialize_fun_lib(){
     fun_lib lib={};
     std::vector<GmInstr> binop ={{UNWIND,std::monostate()}, {SLIDE, 3}, {ADD,
-         std::monostate()}, {EVAL, std::monostate()}, {PUSH, std::pair(ARG, 1)}, {EVAL,
+         std::monostate()}, {EVAL, std::monostate()}, {PUSH, std::pair(ARG, 2)}, {EVAL,
              std::monostate()}, {PUSH, std::pair(ARG, 0)} };
     GmInstr cond={COND,std::pair(std::vector<GmInstr>{{PUSH,std::pair(ARG,1)}},
                 std::vector<GmInstr>{{PUSH,std::pair(ARG,2)}})};
@@ -230,7 +230,7 @@ class G_machine{
                 auto code_pair=std::get<COND>(next.data);
                 curr_stack.pop();
                 assert(cond->index()==NUME);
-                if (std::get<NUME>(*cond)==0){
+                if (std::get<NUME>(*cond)!=0){
                     code.insert(code_pair.first);
                 } else {
                     code.insert(code_pair.second);
@@ -249,6 +249,7 @@ class G_machine{
             } break;
             case EVAL: {
                 auto nd=std::move(curr_stack.top());
+                printf("ev %d\n", nd->index());
                 curr_stack.pop();
                 dump.push(std::pair(std::move(code),std::move(curr_stack)));
                 code=i_stack<GmInstr>();
@@ -290,6 +291,7 @@ class G_machine{
         throw std::logic_error( "Program terminated without result" );
     }
     void unwind(){
+        printf("unw %d\n", curr_stack.top()->index());
         switch (curr_stack.top()->index()){
             case NUME: {
                 if (dump.empty()){
@@ -373,13 +375,6 @@ LEfunction compile(auto&& body){
     code.push_back({SLIDE,arity+1});
     code.push_back({UNWIND, std::monostate()});
     std::reverse(code.begin(),code.end());
-    for (auto&& i: code){
-        printf("%d \n", i.instr);
-        if (i.instr==PUSH){
-            printf("Val:%d \n", std::get<PUSH>(i.data).first);
-        }
-    }
-    printf("all");
     (*globals)[hash]={arity,code};
     return *this;
 }
