@@ -67,7 +67,7 @@ struct GmInstr{
     using GmInstrData=std::variant<int, GmVal, 
                 std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
     GmInstrEnum instr;
-    GmInstrData data{};
+    GmInstrData data;
 };
 
 struct SCo{
@@ -82,14 +82,42 @@ struct SCo{
 using GmInstrData=std::variant<int, GmVal, 
             std::pair<std::vector<GmInstr>,std::vector<GmInstr>>,std::monostate>;
 
-struct Arg{
-    int arg;
-};
-
+struct Arg;
 
 struct function_prototype{
     int hash=0;
-    std::vector<std::variant<Arg, int, function_prototype>> args;
+    std::vector<std::variant<function_prototype, int, Arg>> args;
+    function_prototype operator+ (auto&& a){
+        return {ADD_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator- (auto&& a){
+        return {SUB_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator* (auto&& a){
+        return {MUL_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator/ (auto&& a){
+        return {DIV_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+
+    function_prototype operator== (auto&& a){
+        return {EQU_M,{*this,std::forward<decltype(a)>(a)}};
+    }
+    function_prototype operator()
+        (std::vector<std::variant<function_prototype, int, Arg>> args_t){
+        args=args_t;
+        return (*this);
+    }
+};
+
+using body_t=std::variant<function_prototype, int, Arg>;
+
+struct Arg {
+    int arg;
+    explicit Arg(int arg) : arg(arg){}
     function_prototype operator+ (auto&& a){
         return {ADD_M,{*this,std::forward<decltype(a)>(a)}};
     }
@@ -111,7 +139,8 @@ struct function_prototype{
     }
 };
 
-using Arguments = std::vector<std::variant<Arg, int, function_prototype>>;
+
+using Arguments = std::vector<body_t>;
 
 using fun_lib=std::map<int, SCo>;
 
@@ -137,50 +166,11 @@ fun_lib initialize_fun_lib(){
     return lib;
 };
 
+function_prototype if_fun{IF_M, {}};
+
 fun_lib function_library=initialize_fun_lib();
 
 struct SCo;
-
-class LEfunction {
-    int hash=-1;
-    std::vector<int> args;
-    std::vector<GmInstr> code{};
-    std::map<int, SCo>* globals=&function_library;
-
-    public:
-LEfunction (int arity, auto library){
-    globals=library;
-    args=std::vector<int>(arity);
-    (*globals)[globals->size()]={};
-    hash=globals->size();
-};
-
-LEfunction (int arity){
-    args=std::vector<int>(arity);
-    (*globals)[globals->size()]={};
-    hash=globals->size();
-};
-
-// allows for non-recursive lamdas
-// {2}.compile(plus(Arg(1), Arg(2)))
-LEfunction compile(function_prototype body){
-
-    return *this;
-}
-
-int exec(std::vector<int> new_args){
-    for (int i=0;i<args.size();++i){
-        args[i]=new_args[i];
-    }
-    // prepare_g_machine();
-    return -1;
-}
-
-function_prototype operator() (Arguments arguments){
-    return {hash,arguments};
-}
-
-};
 
 
 struct App;
@@ -356,6 +346,87 @@ class G_machine{
     }
 };
 
+class LEfunction {
+    int hash=-1;
+    int arity=-1;
+    std::vector<GmInstr> code{};
+    std::map<int, SCo>* globals=&function_library;
+
+    public:
+LEfunction (int arity, auto library) : arity(arity){
+    globals=library;
+    (*globals)[globals->size()]={};
+    hash=globals->size();
+};
+
+LEfunction (int arity) : arity(arity){
+    (*globals)[globals->size()]={};
+    hash=globals->size();
+};
+
+// allows for non-recursive lamdas
+// {2}.compile(plus(Arg(1), Arg(2)))({1,2})
+LEfunction compile(auto&& body){
+    int pushed=0;
+    compile_helper(std::forward<decltype(body)>(body), pushed);
+    code.push_back({SLIDE,arity+1});
+    code.push_back({UNWIND, std::monostate()});
+    std::reverse(code.begin(),code.end());
+    for (auto&& i : code){
+        printf("%d \n",i.instr);
+        fflush(stdout);
+    }
+    (*globals)[hash]={arity,code};
+    return *this;
+}
+
+void compile_helper(body_t body, int &pushed){
+    printf("b: %d\n", body.index());
+    switch (body.index()){
+        case GLOB : {
+            function_prototype f=std::get<GLOB>(body);
+            code.push_back({PUSH,std::pair(GLOB,f.hash)});
+            ++pushed;
+            for (auto&& arg : f.args) {
+                printf("i: %d\n", arg.index());
+                fflush(stdout);
+                compile_helper(arg, pushed);
+                code.push_back({MKAP,std::monostate()});
+                --pushed;
+            }
+        } break;
+        case VALUE : {
+            ++pushed;
+            code.push_back({PUSH,std::pair(VALUE,std::get<VALUE>(body))});
+        } break;
+        case ARG : {
+            ++pushed;
+            code.push_back({PUSH,std::pair(ARG,std::get<ARG>(body).arg+pushed)});
+        } break;
+    }
+}
+
+int exec(std::vector<int> args){
+    std::vector<GmInstr> init_code{};
+    init_code.push_back({UNWIND,std::monostate()});
+    for (auto&& arg : args){
+        init_code.push_back({MKAP,std::monostate()});
+        init_code.push_back({PUSH,std::pair(VALUE,arg)});
+    }
+    init_code.push_back({PUSH,std::pair(GLOB,hash)});
+    i_stack<GmInstr> init{};
+    init.insert(std::move(init_code));
+    G_machine g={globals, stack_i{}, dump_t{}, std::move(init)};
+    return g.eval();
+}
+
+function_prototype operator() (Arguments arguments){
+    return {hash,arguments};
+}
+
+};
+
+
 auto main () -> int {
      SCo omega={0, {}};
      SCo mul={1, {}};
@@ -379,6 +450,11 @@ auto main () -> int {
             {PUSH,
              GmVal{std::pair(GLOB, 1)}}});
     G_machine mach(&lib,stack_i{},dump_t{},i);
-    printf("res: %d", mach.eval());
+    LEfunction fact{1};
+    fact.compile(Arg(0)*if_fun({Arg(0)==1,1,fact({Arg(0)-1})}));
+    // mul arg mkap if eq arg mkap 1 mkap mkap 1 mkap fact minus arg mkap 1
+    // mkap mkap mkap mkap SLIDE2 UNWIND
+    int l=fact.exec({10});
+    printf("res: %d", l);
 }
 
