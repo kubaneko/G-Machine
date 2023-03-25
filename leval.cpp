@@ -151,7 +151,7 @@ fun_lib initialize_fun_lib(){
              std::monostate()}, {PUSH, std::pair(ARG, 0)} };
     GmInstr cond={COND,std::pair(std::vector<GmInstr>{{PUSH,std::pair(ARG,1)}},
                 std::vector<GmInstr>{{PUSH,std::pair(ARG,2)}})};
-    std::vector<GmInstr> if_code = {{UNWIND,std::monostate()}, {SLIDE,4}, cond, 
+        std::vector<GmInstr> if_code = {{UNWIND,std::monostate()}, {SLIDE,4}, cond, 
         {EVAL,std::monostate()}, {PUSH, std::pair(ARG, 0)}};
     lib[ADD_M]={2,binop};
     binop[2].instr=SUB;
@@ -181,12 +181,11 @@ using dump_t=std::stack<std::pair<i_stack<GmInstr>,stack_i>>;
 
 
 struct App{
-    std::shared_ptr<GmNode> function{};
-    std::shared_ptr<GmNode> arg{};
-
-    App(std::shared_ptr<GmNode>&& func, std::shared_ptr<GmNode>&& arg){
-        function=std::move(func);
-        arg=std::move(arg);
+    std::shared_ptr<GmNode> function;
+    std::shared_ptr<GmNode> arg;
+    App(auto&& f, auto&& x){
+        function=std::forward<decltype(f)>(f);
+        arg=std::forward<decltype(x)>(x);
     }
 };
 
@@ -212,6 +211,8 @@ class G_machine{
         { }
 
     void perform_instr(GmInstr&& next){
+        printf("%d %d\n",next.instr, curr_stack.size());
+        fflush(stdout);
         switch (next.instr) {
             case PUSH: {
                 push(std::get<PUSH>(next.data));
@@ -249,7 +250,7 @@ class G_machine{
             case EVAL: {
                 auto nd=std::move(curr_stack.top());
                 curr_stack.pop();
-                dump.push(std::pair(code,curr_stack));
+                dump.push(std::pair(std::move(code),std::move(curr_stack)));
                 code=i_stack<GmInstr>();
                 code.push({UNWIND,std::monostate()});
                 curr_stack=stack_i();
@@ -372,36 +373,37 @@ LEfunction compile(auto&& body){
     code.push_back({SLIDE,arity+1});
     code.push_back({UNWIND, std::monostate()});
     std::reverse(code.begin(),code.end());
-    for (auto&& i : code){
-        printf("%d \n",i.instr);
-        fflush(stdout);
+    for (auto&& i: code){
+        printf("%d \n", i.instr);
+        if (i.instr==PUSH){
+            printf("Val:%d \n", std::get<PUSH>(i.data).first);
+        }
     }
+    printf("all");
     (*globals)[hash]={arity,code};
     return *this;
 }
 
 void compile_helper(body_t body, int &pushed){
-    printf("b: %d\n", body.index());
     switch (body.index()){
         case GLOB : {
             function_prototype f=std::get<GLOB>(body);
             code.push_back({PUSH,std::pair(GLOB,f.hash)});
             ++pushed;
             for (auto&& arg : f.args) {
-                printf("i: %d\n", arg.index());
-                fflush(stdout);
                 compile_helper(arg, pushed);
                 code.push_back({MKAP,std::monostate()});
                 --pushed;
             }
         } break;
         case VALUE : {
-            ++pushed;
+            printf("val %d\n",std::get<VALUE>(body));
             code.push_back({PUSH,std::pair(VALUE,std::get<VALUE>(body))});
+            ++pushed;
         } break;
         case ARG : {
-            ++pushed;
             code.push_back({PUSH,std::pair(ARG,std::get<ARG>(body).arg+pushed)});
+            ++pushed;
         } break;
     }
 }
