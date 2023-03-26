@@ -1,7 +1,8 @@
-#ifndef _LEVAL
-#define _LEVAL
+#ifndef LEVAL
+#define LEVAL
 
 #include <string>
+#include <utility>
 #include <vector>
 #include <variant>
 #include <memory>
@@ -21,7 +22,7 @@ class i_stack : public std::stack<T,std::vector<T>>{
     public:
     // reverse indexing
     auto operator[]( int pos ) -> T&{
-        return c[c.size()-1-size_t(pos)];
+        return c[c.size()-1-static_cast<size_t>(pos)];
     }
 
     void insert(std::vector<T>&& to_insert){
@@ -77,7 +78,7 @@ struct GmInstr{
 struct SCo{
     int arity=-1;
     i_stack<GmInstr> code={};
-    SCo (){}
+    SCo ()=default;
     SCo (int arity, std::vector<GmInstr> code_s) : arity(arity){
         code.insert(code_s);
     }
@@ -93,9 +94,9 @@ struct Arg;
 struct function_prototype{
     int hash=0;
     std::vector<std::variant<function_prototype, int, Arg>> args;
-    function_prototype operator()
-        (std::vector<std::variant<function_prototype, int, Arg>> args_t){
-        args=args_t;
+    auto operator()
+        (std::vector<std::variant<function_prototype, int, Arg>> args_t) -> function_prototype{
+        args=std::move(args_t);
         return (*this);
     }
 };
@@ -107,23 +108,23 @@ struct Arg {
 
 using body_t=std::variant<function_prototype, int, Arg>;
 
-function_prototype operator+ (body_t&& a, body_t&& b){
+auto operator+ (body_t&& a, body_t&& b) -> function_prototype{
     return {_int::ADD_M,{std::forward<body_t>(a), std::forward<body_t>(b)}};
 }
 
-function_prototype operator- (body_t&& a, body_t&& b){
+auto operator- (body_t&& a, body_t&& b) -> function_prototype{
     return {_int::SUB_M,{std::forward<body_t>(a), std::forward<body_t>(b)}};
 }
 
-function_prototype operator* (body_t&& a, body_t&& b){
+auto operator* (body_t&& a, body_t&& b) -> function_prototype{
     return {_int::MUL_M,{std::forward<body_t>(a), std::forward<body_t>(b)}};
 }
 
-function_prototype operator/ (body_t&& a, body_t&& b){
+auto operator/ (body_t&& a, body_t&& b) -> function_prototype{
     return {_int::DIV_M,{std::forward<body_t>(a), std::forward<body_t>(b)}};
 }
 
-function_prototype operator== (body_t&& a, body_t&& b){
+auto operator== (body_t&& a, body_t&& b) -> function_prototype{
     return {_int::EQU_M,{std::forward<body_t>(a), std::forward<body_t>(b)}};
 }
 
@@ -131,7 +132,7 @@ using Arguments = std::vector<body_t>;
 
 using fun_lib=std::map<int, _int::SCo>;
 
-fun_lib initialize_fun_lib(){
+auto initialize_fun_lib() -> fun_lib{
     fun_lib lib={};
     std::vector<_int::GmInstr> binop ={{_int::UNWIND,std::monostate()}, {_int::SLIDE,3}, 
         {_int::ADD, std::monostate()}, {_int::EVAL, std::monostate()},
@@ -172,9 +173,9 @@ using dump_t=std::stack<std::pair<i_stack<GmInstr>,stack_i>>;
 struct App{
     std::shared_ptr<GmNode> function;
     std::shared_ptr<GmNode> arg;
-    App(auto&& f, auto&& x){
-        function=std::forward<decltype(f)>(f);
-        arg=std::forward<decltype(x)>(x);
+    App(auto&& f, auto&& x) : function(std::forward<decltype(f)>(f)), arg(std::forward<decltype(x)>(x)){
+        
+        
     }
 };
 
@@ -294,7 +295,7 @@ class G_machine{
             case SCOE: {
                 SCo* sco=std::get<SCOE>(*curr_stack.top());
                 code=sco->code;
-                if (!(curr_stack.size()+1>=size_t(sco->arity))) {
+                if (!(curr_stack.size()+1>=static_cast<size_t>(sco->arity))) {
                     throw std::logic_error( "supercombinator does not have enough arguments" );
                 }
             } break; 
@@ -367,20 +368,20 @@ void compile_helper(body_t body, int &pushed){
 }
 
     public:
-LEfunction (int arity, auto library) : arity(arity){
-    globals=library;
+LEfunction (int arity, auto library) : arity(arity), globals(library){
+    
     (*globals)[globals->size()]={};
     hash=globals->size();
 };
 
-LEfunction (int arity) : arity(arity){
+explicit LEfunction (int arity) : arity(arity){
     (*globals)[globals->size()]={};
     hash=globals->size();
 };
 
 // allows for non-recursive lamdas
 // {2}.compile(Arg(1) + Arg(2))({1,2})
-LEfunction compile(auto&& body){
+auto compile(auto&& body) -> LEfunction{
     int pushed=0;
     compile_helper(std::forward<decltype(body)>(body), pushed);
     code.push_back({_int::SLIDE,arity+1});
@@ -390,7 +391,7 @@ LEfunction compile(auto&& body){
     return *this;
 }
 
-int exec(std::vector<int> args){
+auto exec(const std::vector<int>& args) -> int{
     std::vector<_int::GmInstr> init_code{};
     init_code.push_back({_int::UNWIND,std::monostate()});
     for (auto&& arg : args){
@@ -404,8 +405,8 @@ int exec(std::vector<int> args){
     return g.eval();
 }
 
-function_prototype operator() (Arguments arguments){
-    return {hash,arguments};
+auto operator() (Arguments arguments) -> function_prototype{
+    return {hash,std::move(arguments)};
 }
 
 };
