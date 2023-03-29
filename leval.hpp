@@ -12,6 +12,7 @@
 
 namespace LE {
 
+// internal namespace hides unimportant things from the user
 namespace _int {
 // vector stack with exposed underlying vector
 // because we need indexing, insert of vectors and other operations
@@ -54,8 +55,7 @@ enum GmInstrEnum { // Instructions for the Stack machine
   UNWIND
 };
 
-enum BINOP_MAPPINGS { ADD_M, SUB_M, DIV_M, MUL_M, EQU_M, IF_M };
-
+// type representing Instructions for the stackmachine
 struct GmInstr {
   using GmInstrData =
       std::variant<int, GmVal,
@@ -65,6 +65,11 @@ struct GmInstr {
   GmInstrData data;
 };
 
+// mapping of basic operations in function libraries
+enum BINOP_MAPPINGS { ADD_M, SUB_M, DIV_M, MUL_M, EQU_M, IF_M };
+
+// structure representing supercombinator/functions
+// for the stack_machine
 struct SCo {
   int arity = -1;
   i_stack<GmInstr> code = {};
@@ -83,9 +88,12 @@ using GmInstrData =
 
 struct Arg;
 
+// Symbolic type representing functions for compilation
+// we need their mapping in the function library and their arguments
 struct function_prototype {
   int hash = 0;
   std::vector<std::variant<function_prototype, int, Arg>> args;
+  // same operator as for LEfunctions for if_fun compilation ergonomics
   auto
   operator()(std::vector<std::variant<function_prototype, int, Arg>> args_t)
       -> function_prototype {
@@ -94,13 +102,17 @@ struct function_prototype {
   }
 };
 
+// represents argument of currently compiled function (0,arity-1)
 struct Arg {
   int arg;
   explicit Arg(int arg) : arg(arg) {}
 };
 
+// Possible arguments to a function prototype
 using body_t = std::variant<function_prototype, int, Arg>;
 
+// Operators for ergonomic compilation of functions
+// we can do {1}.compile({Arg(0) - 1}) for decrement function;
 auto operator+(body_t &&a, body_t &&b) -> function_prototype {
   return {_int::ADD_M, {std::forward<body_t>(a), std::forward<body_t>(b)}};
 }
@@ -123,8 +135,11 @@ auto operator==(body_t &&a, body_t &&b) -> function_prototype {
 
 using Arguments = std::vector<body_t>;
 
+// function library represents functions known during execution
 using fun_lib = std::map<int, _int::SCo>;
 
+// initialize adds build-in precompiled operations
+// and must be called before compilation
 auto initialize_fun_lib() -> fun_lib {
   fun_lib lib = {};
   std::vector<_int::GmInstr> binop = {
@@ -158,15 +173,27 @@ function_prototype if_fun{_int::IF_M, {}};
 
 namespace _int {
 
+// default function library functions are added to
 fun_lib function_library = initialize_fun_lib();
 
 struct SCo;
 struct App;
 
+// types representing stack nodes, stack, stack of stacks
 using GmNode = std::variant<int, SCo *, App>;
 using stack_i = i_stack<std::shared_ptr<GmNode>>;
 using dump_t = std::stack<std::pair<i_stack<GmInstr>, stack_i>>;
 
+// enum for GmNodes
+enum GmNodeEnum {
+  NUME,
+  SCOE,
+  APPE,
+};
+
+// application node - represented in curried form
+// if a function of 2 arguments gets 1 argument it returns a function in 1
+// argument
 struct App {
   std::shared_ptr<GmNode> function;
   std::shared_ptr<GmNode> arg;
@@ -175,20 +202,15 @@ struct App {
         arg(std::forward<decltype(x)>(x)) {}
 };
 
-enum GmNodeEnum {
-  NUME,
-  SCOE,
-  APPE,
-};
-
+// the stack machine itself
 class G_machine {
   fun_lib *used_function_library;
-  // stack but we need indexing
   stack_i curr_stack{};
   dump_t dump{};
   i_stack<GmInstr> code;
 
 public:
+  // executes itself
   auto eval() -> int {
     while (!end()) {
       auto next_i = std::move(code.top());
@@ -200,6 +222,7 @@ public:
     }
     throw std::logic_error("Program terminated without result");
   }
+
   G_machine(auto &&lib, auto &&curr, auto &&dump, auto &&code)
       : used_function_library(std::forward<decltype(lib)>(lib)),
         curr_stack(std::forward<decltype(curr)>(curr)),
@@ -207,12 +230,14 @@ public:
         code(std::forward<decltype(code)>(code)) {}
 
 private:
+  // performs single instruction and updates its state
   void perform_instr(GmInstr &&next) {
     switch (next.instr) {
     case PUSH: {
       push(std::get<PUSH>(next.data));
     } break;
     case SLIDE: {
+      // saves top element and removes n+1 elements from stack
       auto saves = std::move(curr_stack.top());
       int num = std::get<SLIDE>(next.data);
       for (int i = 0; i <= num; ++i) {
@@ -221,6 +246,7 @@ private:
       curr_stack.push(saves);
     } break;
     case COND: {
+      // condition instruction
       auto cond = std::move(curr_stack.top());
       auto code_pair = std::get<COND>(next.data);
       curr_stack.pop();
@@ -232,6 +258,7 @@ private:
       // Add the new code to instructs
     } break;
     case MKAP: {
+      // makes an application node from 2 top-most nodes
       auto x = std::move(curr_stack.top());
       curr_stack.pop();
       auto f = std::move(curr_stack.top());
@@ -240,9 +267,12 @@ private:
           std::make_shared<GmNode>(App(std::move(f), std::move(x))));
     } break;
     case UNWIND: {
+      // Prepares stack for execution
       unwind();
     } break;
     case EVAL: {
+      // Actually evaluating the top element
+      // we make another stack and save the current state
       auto nd = std::move(curr_stack.top());
       curr_stack.pop();
       dump.push(std::pair(std::move(code), std::move(curr_stack)));
@@ -256,6 +286,7 @@ private:
       curr_stack.push(
           std::move(std::make_shared<GmNode>(arg.second + arg.first)));
     } break;
+    // Trivial evaluation of binary operations
     case SUB: {
       auto arg = getNums();
       curr_stack.push(
@@ -281,6 +312,7 @@ private:
 
   void unwind() {
     switch (curr_stack.top()->index()) {
+    // we have either ended the computation or evaluated some expression
     case NUME: {
       if (dump.empty()) {
         code = i_stack<GmInstr>();
@@ -292,6 +324,7 @@ private:
         dump.pop();
       }
     } break;
+    // we load the super combinator code and continue execution
     case SCOE: {
       SCo *sco = std::get<SCOE>(*curr_stack.top());
       code = sco->code;
@@ -300,6 +333,7 @@ private:
             "supercombinator does not have enough arguments");
       }
     } break;
+    // we push function of the application on the stack
     case APPE: {
       code = i_stack<GmInstr>();
       code.push({UNWIND, std::monostate()});
@@ -307,18 +341,23 @@ private:
     } break;
     }
   }
+  // different pushes
   void push(GmVal val) {
     switch (val.first) {
+    // pushes super combinator from fun_lib
     case GLOB: {
       SCo *sco = &(*used_function_library)[val.second];
       curr_stack.push(std::make_shared<GmNode>(sco));
     } break;
+    // pushes a constant
     case VALUE: {
       curr_stack.push(std::make_shared<GmNode>(val.second));
     } break;
+    // argument of the function at curr_stack[i]
     case ARG: {
       curr_stack.push(std::get<APPE>(*curr_stack[val.second + 1]).arg);
     } break;
+    // pointer to curr_stack[i] - used to optimize
     case LOCAL: {
       curr_stack.push(curr_stack[val.second]);
     } break;
@@ -331,6 +370,8 @@ private:
     curr_stack.pop();
     return std::pair(std::get<NUME>(*a), std::get<NUME>(*b));
   }
+  // execution ends if there is no more code or
+  // there is nothing more to execute and there is only a number on the stack
   auto end() -> bool {
     bool whnf = curr_stack.size() == 1 && curr_stack.top()->index() == NUME;
     return code.empty() || (dump.empty() && whnf);
@@ -339,14 +380,19 @@ private:
 
 } // namespace _int
 
+// representation of functions for users
 class LEfunction {
+  // we maintain mapping, arity, instructions, code is only non-empty during
+  // compilation and pointer to the function_library we want to use
   int hash = -1;
   int arity = -1;
   std::vector<_int::GmInstr> code{};
   std::map<int, _int::SCo> *globals = &_int::function_library;
 
+  // compiles body to code
   void compile_helper(body_t body, int &pushed) {
     switch (body.index()) {
+    // recurse
     case _int::GLOB: {
       function_prototype f = std::get<_int::GLOB>(body);
       code.push_back({_int::PUSH, std::pair(_int::GLOB, f.hash)});
@@ -372,6 +418,7 @@ class LEfunction {
   }
 
 public:
+  // constructing functions adds it to the library
   LEfunction(int arity, auto library) : arity(arity), globals(library) {
 
     (*globals)[globals->size()] = {};
@@ -383,7 +430,8 @@ public:
     hash = globals->size();
   };
 
-  // allows for non-recursive lamdas
+  // compile compiles body and cleanes up
+  // return value allows for non-recursive lamdas
   // {2}.compile(Arg(1) + Arg(2))({1,2})
   auto compile(auto &&body) -> LEfunction {
     int pushed = 0;
@@ -391,10 +439,12 @@ public:
     code.push_back({_int::SLIDE, arity + 1});
     code.push_back({_int::UNWIND, std::monostate()});
     std::reverse(code.begin(), code.end());
-    (*globals)[hash] = {arity, code};
+    (*globals)[hash] = {arity, std::move(code)};
+    code = {};
     return *this;
   }
 
+  // execution makes a temporary function for arguments and evaluates
   auto exec(const std::vector<int> &args) -> int {
     std::vector<_int::GmInstr> init_code{};
     init_code.push_back({_int::UNWIND, std::monostate()});
@@ -410,6 +460,8 @@ public:
     return g.eval();
   }
 
+  // allows to set function body for other funcitons
+  // by calling the function
   auto operator()(Arguments arguments) -> function_prototype {
     return {hash, std::move(arguments)};
   }
