@@ -32,7 +32,7 @@ otherwise its third argument.
 ```cpp
 LEfunction omega{0};
 omega.compile(omega({}));
-omega.exec();
+omega.exec({});
 
 ```
 
@@ -59,7 +59,7 @@ fact.compile(Arg(0) * if_fun({Arg(0) == 1, 1, fact({Arg(0) - 1})}));
 ```cpp
 LEfunction weird_plus {2};
 weird_plus.compile(
-    {2}.compile(Arg(0)+Arg(1)) // Lambda
-    ({Arg(0)*Arg(1), Arg(1)})  // arguments for the lambda
+    LEfunction(2).compile(Arg(0)+Arg(1)) // Lambda
+    ({Arg(0)*Arg(1), Arg(1)})            // arguments for the lambda
 );
 ```

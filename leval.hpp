@@ -445,12 +445,13 @@ public:
   // execution makes a temporary function for arguments and evaluates
   auto exec(const std::vector<int> &args) -> int {
     std::vector<_int::GmInstr> init_code{};
-    init_code.push_back({_int::UNWIND, std::monostate()});
-    for (auto &&arg : args) {
-      init_code.push_back({_int::MKAP, std::monostate()});
-      init_code.push_back({_int::PUSH, std::pair(_int::VALUE, arg)});
-    }
     init_code.push_back({_int::PUSH, std::pair(_int::GLOB, hash)});
+    for (auto &&arg : args) {
+      init_code.push_back({_int::PUSH, std::pair(_int::VALUE, arg)});
+      init_code.push_back({_int::MKAP, std::monostate()});
+    }
+    init_code.push_back({_int::UNWIND, std::monostate()});
+    std::reverse(init_code.begin(), init_code.end());
     _int::i_stack<_int::GmInstr> init{};
     init.insert(std::move(init_code));
     _int::G_machine g = {globals, _int::stack_i{}, _int::dump_t{},
