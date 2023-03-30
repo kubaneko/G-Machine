@@ -57,9 +57,9 @@ fact.compile(Arg(0) * if_fun({Arg(0) == 1, 1, fact({Arg(0) - 1})}));
 
 - we can define non-recursive lambdas in function definitions as follows
 ```cpp
-LEfunction plus {2};
-plus.compile(
-{2}.compile(Arg(0)+Arg(1)) // Lambda
-({Arg(0), Arg(1)});        // arguments for the lambda
+LEfunction weird_plus {2};
+weird_plus.compile(
+    {2}.compile(Arg(0)+Arg(1)) // Lambda
+    ({Arg(0)*Arg(1), Arg(1)})  // arguments for the lambda
 );
 ```
