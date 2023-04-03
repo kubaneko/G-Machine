@@ -36,4 +36,9 @@ int main() {
                 1}),
             0 
     }));
+
+    // Argument sharing
+    LEfunction mul2 {1};
+    mul2.compile(Arg(0)*Arg(0));
+    // LEfunction share{1}; (only one multiplication is performed)
 }

@@ -271,13 +271,13 @@ private:
     case EVAL: {
       // Actually evaluating the top element
       // we make another stack and save the current state
-      auto nd = std::move(curr_stack.top());
-      curr_stack.pop();
+      // we want it to remain on the top of the stack so we can share the result
+      auto nd = curr_stack.top();
       dump.push(std::pair(std::move(code), std::move(curr_stack)));
       code = i_stack<GmInstr>();
       code.push({UNWIND, std::monostate()});
       curr_stack = stack_i();
-      curr_stack.push(std::move(nd));
+      curr_stack.push(nd);
     } break;
     case ADD: {
       auto arg = getNums();
@@ -317,6 +317,9 @@ private:
       } else {
         auto st = std::move(curr_stack);
         curr_stack = std::move(dump.top().second);
+        // We share results with with other computations
+        *curr_stack.top()=*st.top();
+        curr_stack.pop();
         curr_stack.insert(std::move(st));
         code = std::move(dump.top().first);
         dump.pop();
