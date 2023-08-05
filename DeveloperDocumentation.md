@@ -86,6 +86,5 @@ There are two representation for functions function_prototype and LEfunction.
 
 ## References
 
-G-Machine is inspired by the Haskell implementation. Which can be found here.
-
-[Implementing lazy functional languages on stock hardoware: the Spineless Tagless G-machine Version 2.5 Simon L Peyton Jones](https://www.microsoft.com/en-us/research/wp-content/uploads/1992/04/spineless-tagless-gmachine.pdf)
+Inspired by [https://amelia.how/posts/the-gmachine-in-detail.html](https://amelia.how/posts/the-gmachine-in-detail.html)
+Related paper [Implementing lazy functional languages on stock hardoware: the Spineless Tagless G-machine Version 2.5 Simon L Peyton Jones](https://www.microsoft.com/en-us/research/wp-content/uploads/1992/04/spineless-tagless-gmachine.pdf)
